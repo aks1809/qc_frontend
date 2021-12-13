@@ -9,12 +9,15 @@ import { Chart as ChartJS } from 'chart.js/auto';
 import { Bar } from 'react-chartjs-2';
 import { SocketContext } from './socketContext';
 import axios from 'axios';
+import DataTable from './Components/DataTable'
+
+const timeMapper = 16;
 
 const msToMinutes = (time, getFloating) => {
   const minutes = Math.floor(time / 60);
   const seconds = (time % 60).toFixed(0);
   if (getFloating) {
-    return parseFloat(`${minutes}.${(seconds < 10 ? '0' : '') + seconds}`);
+    return parseFloat(`${minutes}.${(seconds < 10 ? '0' : '') + seconds}`).toFixed(2);
   }
   return `${minutes}:${(seconds < 10 ? '0' : '') + seconds}`;
 };
@@ -26,7 +29,7 @@ const getTotal = (obj, isNumber) => {
     total += e;
   });
   if (isNumber) return total;
-  return msToMinutes(total);
+  return msToMinutes(total, true);
 };
 
 const convertObjectToArray = (obj) => {
@@ -38,23 +41,22 @@ const convertObjectToArray = (obj) => {
 const getIncrement = (state) => {
   if (!state) return null;
   const newState = state;
-  const currentHour = new Date().getHours() + 1;
+  const currentHour = new Date().getHours() - timeMapper;
   if (state.isActive) {
     // increment active and cycle time
-    newState.activeData[currentHour] += 1;
-    newState.cycleTime[currentHour] += 1;
+    newState.activeData[currentHour]++;
+    newState.cycleTime[currentHour]++;
   } else {
     // increment idle time
-    newState.idleData[currentHour] += 1;
+    newState.idleData[currentHour]++;
   }
   return newState;
 };
 
 const getIncrementCycle = (state) => {
   if (!state) return null;
-  const currentHour = new Date().getHours() + 1;
-  console.log(state, currentHour);
-  state.totalCycleTime[currentHour] += 1;
+  const currentHour = new Date().getHours() - timeMapper;
+  state.cycleTime[currentHour]++;
   return state;
 };
 
@@ -73,35 +75,27 @@ const reducer = (state, action) => {
     case 'increment-first':
       return {
         ...state,
-        first: getIncrement(state.first),
+        first: action.data,
       };
     case 'increment-second':
       return {
         ...state,
-        second: getIncrement(state.second),
+        second: action.data,
       };
     case 'increment-cycle-first':
-      console.log(2, action.data);
       return {
         ...state,
-        first: getIncrementCycle(state.first),
+        first: action.data,
       };
     case 'increment-cycle-second':
       return {
         ...state,
-        second: getIncrementCycle(state.second),
+        second: action.data,
       };
     case 'change-state-first':
-      console.log(1, action.data);
-      return {
-        ...state,
-        first: { ...state.first, isActive: action.data },
-      };
+      return action.data;
     case 'change-state-second':
-      return {
-        ...state,
-        second: { ...state.second, isActive: action.data },
-      };
+      return action.data;
     default:
       return state;
   }
@@ -118,13 +112,13 @@ const formatData = (data) => {
     cycleTime: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     totalCycles: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     machineName: data.machineName,
-    isActive: true,
+    isActive: false,
   };
   let startHour;
   let endHour;
   data.cycleTime.forEach((e) => {
-    startHour = new Date(e?.start)?.getHours() + 1;
-    endHour = new Date(e?.end)?.getHours() + 1;
+    startHour = new Date(e?.start)?.getHours() - timeMapper;
+    endHour = new Date(e?.end)?.getHours() - timeMapper;
     if (startHour > 0 || startHour < 8) {
       if (startHour === endHour) {
         initialData.cycleTime[startHour] +=
@@ -137,7 +131,7 @@ const formatData = (data) => {
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
-        initialData.cycleTime[endHour] += e.end.getSeconds();
+        initialData.cycleTime[endHour] += new Date(e.end).getSeconds();
         initialData.totalCycles[endHour]++;
       } else {
         initialData.cycleTime[startHour] +=
@@ -146,16 +140,18 @@ const formatData = (data) => {
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
+        initialData.isActive = true;
       }
     }
   });
   data.idleTime.forEach((e) => {
-    startHour = new Date(e?.start)?.getHours() + 1;
-    endHour = new Date(e?.end)?.getHours() + 1;
+    startHour = new Date(e?.start)?.getHours() - timeMapper;
+    endHour = new Date(e?.end)?.getHours() - timeMapper;
     if (startHour > 0 || startHour < 8) {
       if (startHour === endHour) {
         initialData.idleData[startHour] +=
-          new Date(e.end).getSeconds() - new Date(e.start).getSeconds();
+          (new Date(e.end).getTime() - new Date(e.start).getTime())/1000;
+        initialData.isActive = true;
       } else if (endHour) {
         initialData.idleData[startHour] +=
           3600 -
@@ -163,7 +159,8 @@ const formatData = (data) => {
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
-        initialData.idleData[endHour] += e.end.getSeconds();
+        initialData.idleData[endHour] += toSeconds(new Date(e.end).getMinutes(),new Date(e.end).getSeconds());
+        initialData.isActive = true;
       } else {
         initialData.idleData[startHour] +=
           3600 -
@@ -171,12 +168,11 @@ const formatData = (data) => {
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
-        initialData.isActive = false;
       }
     }
   });
   const currentDate = new Date();
-  const currentHour = currentDate.getHours() + 1;
+  const currentHour = currentDate.getHours() - timeMapper;
   for (let i = 0; i < currentHour; i++) {
     initialData.activeData[i] += 3600 - initialData.idleData[i];
   }
@@ -190,6 +186,9 @@ const formatData = (data) => {
 export default function Dashboard() {
   const [socketConnectedOne, setSocketConnectedOne] = useState(false);
   const [socketConnectedTwo, setSocketConnectedTwo] = useState(false);
+  const [firstInterval, setFirstInterval] = useState(null);
+  const [secondInterval, setSecondInterval] = useState(null);
+  const [visibleId, setVisibleId] = useState(1);
   const [state, dispatch] = useReducer(reducer, {
     first: null,
     second: null,
@@ -238,53 +237,66 @@ export default function Dashboard() {
     return () => {
       mounted = false;
     };
-  }, [state]);
+  }, []);
 
   useEffect(() => {
     socket.on('cs01', (data) => {
-      console.log(data);
+      if(!state.first) return;
       if (typeof data.working !== 'undefined') {
         if (data.working) {
+          const newState = state;
+          newState.first.isActive = true;
           dispatch({
             type: 'change-state-first',
-            data: data.working,
+            data: newState,
           });
         } else {
+          const newState = state;
+          newState.first.isActive = false;
           dispatch({
-            type: 'change-state-second',
-            data: data.working,
+            type: 'change-state-first',
+            data: newState,
           });
         }
       } else if (typeof data.cycle !== 'undefined') {
         if (!data.cycle) {
           dispatch({
             type: 'increment-cycle-first',
+            data: getIncrementCycle(state.first)
           });
         }
+      }else {
+        clearInterval(firstInterval);
       }
     });
 
     socket.on('cs02', (data) => {
-      console.log(data);
+      if(!state.second) return;
       if (typeof data.working !== 'undefined') {
         if (data.working) {
+          const newState = state;
+          newState.second.isActive = true;
           dispatch({
             type: 'change-state-second',
-            data: data.working,
+            data: newState,
           });
         } else {
+          const newState = state;
+          newState.second.isActive = false;
           dispatch({
             type: 'change-state-second',
-            data: data.working,
+            data: newState,
           });
         }
       } else if (typeof data.cycle !== 'undefined') {
         if (!data.cycle) {
           dispatch({
             type: 'increment-cycle-second',
-            data: data.working,
+            data: getIncrementCycle(state.second)
           });
         }
+      }else {
+        clearInterval(secondInterval);
       }
     });
 
@@ -301,14 +313,16 @@ export default function Dashboard() {
     }
     const intervalOne = setInterval(() => {
       // increment 1s in state
-      const index = new Date().getHours() + 1;
+      const index = new Date().getHours() - timeMapper;
       if (index < 0 || index > 7) return;
       if (state.first !== null) {
         dispatch({
           type: 'increment-first',
+          data: getIncrement(state.first)
         });
       }
     }, 1000);
+    setFirstInterval(intervalOne);
     return () => clearInterval(intervalOne);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socketConnectedOne]);
@@ -319,14 +333,16 @@ export default function Dashboard() {
     }
     const intervalTwo = setInterval(() => {
       // increment 1000ms in state
-      const index = new Date().getHours() + 1;
+      const index = new Date().getHours() - timeMapper;
       if (index < 0 || index > 7) return;
       if (state.second !== null) {
         dispatch({
           type: 'increment-second',
+          data: getIncrement(state.second)
         });
       }
     }, 1000);
+    setSecondInterval(intervalTwo)
     return () => clearInterval(intervalTwo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socketConnectedTwo]);
@@ -517,15 +533,19 @@ export default function Dashboard() {
               {getTotal(item?.totalCycles, true)}
             </div>
             <div style={{ color: '#1BBC1B', fontSize: '14px' }}>
-              {msToMinutes(
-                getTotal(state?.first?.totalCycles, true) === 0
-                  ? 0
+              {item?.cycleTime?(
+                <>
+                  {msToMinutes(
+                getTotal(item?.totalCycles, true) === 0
+                  ? getTotal(item?.activeData, true)
                   : (
                       getTotal(item?.cycleTime, true) /
                       getTotal(item?.totalCycles, true)
-                    ).toFixed(2)
-              )}{' '}
+                    )
+                    )}
               mins
+                </>
+              ):('NA')}
             </div>
           </div>
         ))}
@@ -549,10 +569,11 @@ export default function Dashboard() {
                 Select Workstation :{' '}
               </span>
               <CustomSelect
-                defaultText="Mechanical"
+                selectedName={visibleId===0?"Mechanical":"Electrical"}
                 imageColor="true"
                 optionsList={countryList}
-                selectedItem="Mechanical"
+                selectedItem={visibleId===0?"Mechanical":"Electrical"}
+                changeSelect={(e)=> setVisibleId(e)}
               />
             </div>
             <div className="d-flex align-items-center">
@@ -584,34 +605,7 @@ export default function Dashboard() {
           <div style={{ color: '#52575C' }}>No of task</div>
           <div style={{ color: '#52575C' }}>Cycle time</div>
         </div>
-        {state.first &&
-          state.first.activeData.map((item, index) => (
-            <div className="table-cont" key={index}>
-              <div
-                style={{ width: '35%', paddingLeft: '4%', color: '#52575C' }}
-              >
-                {index + 1}
-              </div>
-              <div style={{ color: '#1BBC1B', fontSize: '14px' }}>
-                {msToMinutes(state?.first?.idleData[index])} mins
-              </div>
-              <div style={{ color: '#1BBC1B', fontSize: '14px' }}>
-                {msToMinutes(item)} mins
-              </div>
-              <div style={{ color: '#1BBC1B', fontSize: '14px' }}>
-                {state?.first?.totalCycles[index]}
-              </div>
-              <div style={{ color: '#1BBC1B', fontSize: '14px' }}>
-                {state?.first?.totalCycles[index] === 0
-                  ? '0:00'
-                  : msToMinutes(
-                      state?.first?.cycleTime[index] /
-                        state?.first?.totalCycles[index]
-                    )}
-                mins
-              </div>
-            </div>
-          ))}
+        <DataTable data={visibleId===0?state.first:state.second} />
       </div>
 
       <div
@@ -636,7 +630,7 @@ export default function Dashboard() {
             : msToMinutes(
                 getTotal(state?.first?.cycleTime, true) /
                   getTotal(state?.first?.totalCycles, true)
-              ).toFixed(2)}{' '}
+              )}{' '}
           mins
         </div>
       </div>

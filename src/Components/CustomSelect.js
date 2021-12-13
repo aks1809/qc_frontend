@@ -9,7 +9,6 @@ class CustomSelect extends React.Component {
     // @showOptionList => Show / Hide List options
     // @optionsList => List of options
     this.state = {
-      defaultSelectText: '',
       showOptionList: false,
       optionsList: [],
     };
@@ -19,9 +18,6 @@ class CustomSelect extends React.Component {
     // Add Event Listner to handle the click that happens outside
     // the Custom Select Container
     document.addEventListener('mousedown', this.handleClickOutside);
-    this.setState({
-      defaultSelectText: this.props.defaultText,
-    });
   }
 
   componentWillUnmount() {
@@ -55,16 +51,12 @@ class CustomSelect extends React.Component {
   // This method handles the setting of name in select text area
   // and list display on selection
   handleOptionClick = (e, id, warehouse) => {
-    this.setState({
-      defaultSelectText: e.target.getAttribute('data-name'),
-      showOptionList: false,
-    });
-    this.props.selectedItem(e.target.getAttribute('data-name'), id, warehouse);
+    this.props.changeSelect(id);
   };
 
   render() {
     const { optionsList } = this.props;
-    const { showOptionList, defaultSelectText } = this.state;
+    const { showOptionList } = this.state;
 
     return (
       <div className="custom-select-container" style={this.props.style}>
@@ -72,7 +64,7 @@ class CustomSelect extends React.Component {
           className={showOptionList ? 'selected-text active' : 'selected-text'}
           onClick={this.handleListDisplay}
         >
-          {defaultSelectText}
+          {this.props.selectedName}
           <span style={{ marginLeft: '11px' }}>
             {this.props.imageColor === 'true' ? (
               <Drop
