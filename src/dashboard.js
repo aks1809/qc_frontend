@@ -38,11 +38,12 @@ const convertObjectToArray = (obj) => {
   return arr;
 };
 
-const getIncrement = (state) => {
+const getIncrement = (state, isActive) => {
+  console.log(state.machineName, isActive);
   if (!state) return null;
   const newState = state;
   const currentHour = new Date().getHours() - timeMapper;
-  if (state.isActive) {
+  if (isActive) {
     // increment active and cycle time
     newState.activeData[currentHour]++;
     newState.cycleTime[currentHour]++;
@@ -93,9 +94,17 @@ const reducer = (state, action) => {
         second: action.data,
       };
     case 'change-state-first':
-      return action.data;
+      console.log(action.data);
+      return {
+        ...state,
+        first: action.data
+      };
     case 'change-state-second':
-      return action.data;
+      console.log(action.data);
+      return {
+        ...state,
+        second: action.data
+      };
     default:
       return state;
   }
@@ -112,7 +121,6 @@ const formatData = (data) => {
     cycleTime: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     totalCycles: [0, 0, 0, 0, 0, 0, 0, 0, 0],
     machineName: data.machineName,
-    isActive: false,
   };
   let startHour;
   let endHour;
@@ -140,7 +148,6 @@ const formatData = (data) => {
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
-        initialData.isActive = true;
       }
     }
   });
@@ -151,7 +158,6 @@ const formatData = (data) => {
       if (startHour === endHour) {
         initialData.idleData[startHour] +=
           (new Date(e.end).getTime() - new Date(e.start).getTime())/1000;
-        initialData.isActive = true;
       } else if (endHour) {
         initialData.idleData[startHour] +=
           3600 -
@@ -160,17 +166,20 @@ const formatData = (data) => {
             new Date(e.start).getSeconds()
           );
         initialData.idleData[endHour] += toSeconds(new Date(e.end).getMinutes(),new Date(e.end).getSeconds());
-        initialData.isActive = true;
       } else {
+        console.log()
         initialData.idleData[startHour] +=
-          3600 -
+          toSeconds(new Date().getMinutes(), new Date().getSeconds()) -
           toSeconds(
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
       }
     }
-  });
+  })
+  if(data?.idleTime?.slice(-1)[0].end){
+    initialData.isActive = true;
+  }
   const currentDate = new Date();
   const currentHour = currentDate.getHours() - timeMapper;
   for (let i = 0; i < currentHour; i++) {
@@ -188,7 +197,9 @@ export default function Dashboard() {
   const [socketConnectedTwo, setSocketConnectedTwo] = useState(false);
   const [firstInterval, setFirstInterval] = useState(null);
   const [secondInterval, setSecondInterval] = useState(null);
-  const [visibleId, setVisibleId] = useState(1);
+  const [visibleId, setVisibleId] = useState(0);
+  const [isFirstActive, setIsFirstActive] = useState(false);
+  const [isSecondActive, setIsSecondActive] = useState(false);
   const [state, dispatch] = useReducer(reducer, {
     first: null,
     second: null,
@@ -222,12 +233,20 @@ export default function Dashboard() {
               type: 'initiate-first',
               data: formatData({ ...ele, machineName: 'Mechanical' }),
             });
+            console.log(ele.idleTime.slice(-1)[0])
+            if(ele.idleTime.slice(-1)[0].end){
+              setIsFirstActive(true);
+            }
             setSocketConnectedOne(true);
           } else {
             dispatch({
               type: 'initiate-second',
               data: formatData({ ...ele, machineName: 'Electrical' }),
             });
+            console.log(ele.idleTime.slice(-1)[0])
+            if(ele.idleTime.slice(-1)[0].end){
+              setIsSecondActive(true);
+            }
             setSocketConnectedTwo(true);
           }
         });
@@ -243,20 +262,11 @@ export default function Dashboard() {
     socket.on('cs01', (data) => {
       if(!state.first) return;
       if (typeof data.working !== 'undefined') {
-        if (data.working) {
-          const newState = state;
-          newState.first.isActive = true;
-          dispatch({
-            type: 'change-state-first',
-            data: newState,
-          });
+        console.log(data.working, 'one')
+        if (data.working===1) {
+          setIsFirstActive(true);
         } else {
-          const newState = state;
-          newState.first.isActive = false;
-          dispatch({
-            type: 'change-state-first',
-            data: newState,
-          });
+          setIsFirstActive(false);
         }
       } else if (typeof data.cycle !== 'undefined') {
         if (!data.cycle) {
@@ -273,20 +283,11 @@ export default function Dashboard() {
     socket.on('cs02', (data) => {
       if(!state.second) return;
       if (typeof data.working !== 'undefined') {
-        if (data.working) {
-          const newState = state;
-          newState.second.isActive = true;
-          dispatch({
-            type: 'change-state-second',
-            data: newState,
-          });
+        console.log(data.working, 'two')
+        if (data.working===1) {
+          setIsSecondActive(true);
         } else {
-          const newState = state;
-          newState.second.isActive = false;
-          dispatch({
-            type: 'change-state-second',
-            data: newState,
-          });
+          setIsSecondActive(false);
         }
       } else if (typeof data.cycle !== 'undefined') {
         if (!data.cycle) {
@@ -305,7 +306,7 @@ export default function Dashboard() {
       // unbind all event handlers used in this component
       socket.off('disconnect');
     };
-  }, [socket, state.isFirstIdle, state.isSecondIdle]);
+  }, [socket]);
 
   useEffect(() => {
     if (!socketConnectedOne) {
@@ -318,7 +319,7 @@ export default function Dashboard() {
       if (state.first !== null) {
         dispatch({
           type: 'increment-first',
-          data: getIncrement(state.first)
+          data: getIncrement(state.first, isFirstActive)
         });
       }
     }, 1000);
@@ -338,7 +339,7 @@ export default function Dashboard() {
       if (state.second !== null) {
         dispatch({
           type: 'increment-second',
-          data: getIncrement(state.second)
+          data: getIncrement(state.second, isSecondActive)
         });
       }
     }, 1000);
