@@ -9,15 +9,17 @@ import { Chart as ChartJS } from 'chart.js/auto';
 import { Bar } from 'react-chartjs-2';
 import { SocketContext } from './socketContext';
 import axios from 'axios';
-import DataTable from './Components/DataTable'
+import DataTable from './Components/DataTable';
 
-const timeMapper = 16;
+const timeMapper = 1;
 
 const msToMinutes = (time, getFloating) => {
   const minutes = Math.floor(time / 60);
   const seconds = (time % 60).toFixed(0);
   if (getFloating) {
-    return parseFloat(`${minutes}.${(seconds < 10 ? '0' : '') + seconds}`).toFixed(2);
+    return parseFloat(
+      `${minutes}.${(seconds < 10 ? '0' : '') + seconds}`
+    ).toFixed(2);
   }
   return `${minutes}:${(seconds < 10 ? '0' : '') + seconds}`;
 };
@@ -29,7 +31,7 @@ const getTotal = (obj, isNumber) => {
     total += e;
   });
   if (isNumber) return total;
-  return msToMinutes(total, true);
+  return msToMinutes(total);
 };
 
 const convertObjectToArray = (obj) => {
@@ -39,7 +41,6 @@ const convertObjectToArray = (obj) => {
 };
 
 const getIncrement = (state, isActive) => {
-  console.log(state.machineName, isActive);
   if (!state) return null;
   const newState = state;
   const currentHour = new Date().getHours() - timeMapper;
@@ -64,15 +65,9 @@ const getIncrementCycle = (state) => {
 const reducer = (state, action) => {
   switch (action.type) {
     case 'initiate-first':
-      return {
-        ...state,
-        first: action.data,
-      };
+      return action.data;
     case 'initiate-second':
-      return {
-        ...state,
-        second: action.data,
-      };
+      return action.data;
     case 'increment-first':
       return {
         ...state,
@@ -94,16 +89,14 @@ const reducer = (state, action) => {
         second: action.data,
       };
     case 'change-state-first':
-      console.log(action.data);
       return {
         ...state,
-        first: action.data
+        isFirstActive: action.data,
       };
     case 'change-state-second':
-      console.log(action.data);
       return {
         ...state,
-        second: action.data
+        isSecondActive: action.data,
       };
     default:
       return state;
@@ -114,12 +107,13 @@ const toSeconds = (minutes, seconds) => {
   return minutes * 60 + seconds;
 };
 
-const formatData = (data) => {
-  const initialData = {
-    activeData: [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    idleData: [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    cycleTime: [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    totalCycles: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+const formatData = (data, isFirst, state) => {
+  const initialData = state;
+  const setData = {
+    activeData: [0, 0, 0, 0, 0, 0, 0],
+    idleData: [0, 0, 0, 0, 0, 0, 0],
+    cycleTime: [0, 0, 0, 0, 0, 0, 0],
+    totalCycles: [0, 0, 0, 0, 0, 0, 0],
     machineName: data.machineName,
   };
   let startHour;
@@ -129,20 +123,20 @@ const formatData = (data) => {
     endHour = new Date(e?.end)?.getHours() - timeMapper;
     if (startHour > 0 || startHour < 8) {
       if (startHour === endHour) {
-        initialData.cycleTime[startHour] +=
+        setData.cycleTime[startHour] +=
           new Date(e.end).getSeconds() - new Date(e.start).getSeconds();
-        initialData.totalCycles[startHour]++;
+        setData.totalCycles[startHour]++;
       } else if (endHour) {
-        initialData.cycleTime[startHour] +=
+        setData.cycleTime[startHour] +=
           3600 -
           toSeconds(
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
-        initialData.cycleTime[endHour] += new Date(e.end).getSeconds();
-        initialData.totalCycles[endHour]++;
+        setData.cycleTime[endHour] += new Date(e.end).getSeconds();
+        setData.totalCycles[endHour]++;
       } else {
-        initialData.cycleTime[startHour] +=
+        setData.cycleTime[startHour] +=
           3600 -
           toSeconds(
             new Date(e.start).getMinutes(),
@@ -156,19 +150,21 @@ const formatData = (data) => {
     endHour = new Date(e?.end)?.getHours() - timeMapper;
     if (startHour > 0 || startHour < 8) {
       if (startHour === endHour) {
-        initialData.idleData[startHour] +=
-          (new Date(e.end).getTime() - new Date(e.start).getTime())/1000;
+        setData.idleData[startHour] +=
+          (new Date(e.end).getTime() - new Date(e.start).getTime()) / 1000;
       } else if (endHour) {
-        initialData.idleData[startHour] +=
+        setData.idleData[startHour] +=
           3600 -
           toSeconds(
             new Date(e.start).getMinutes(),
             new Date(e.start).getSeconds()
           );
-        initialData.idleData[endHour] += toSeconds(new Date(e.end).getMinutes(),new Date(e.end).getSeconds());
+        setData.idleData[endHour] += toSeconds(
+          new Date(e.end).getMinutes(),
+          new Date(e.end).getSeconds()
+        );
       } else {
-        console.log()
-        initialData.idleData[startHour] +=
+        setData.idleData[startHour] +=
           toSeconds(new Date().getMinutes(), new Date().getSeconds()) -
           toSeconds(
             new Date(e.start).getMinutes(),
@@ -176,19 +172,31 @@ const formatData = (data) => {
           );
       }
     }
-  })
-  if(data?.idleTime?.slice(-1)[0].end){
-    initialData.isActive = true;
+  });
+  let isActive = false;
+  if (
+    (data.idleTime.length > 0 && data.idleTime.slice(-1)[0].end) ||
+    (data.cycleTime.length > 0 &&
+      typeof data.cycleTime.slice(-1)[0].end !== 'undefined')
+  ) {
+    isActive = true;
   }
   const currentDate = new Date();
   const currentHour = currentDate.getHours() - timeMapper;
   for (let i = 0; i < currentHour; i++) {
-    initialData.activeData[i] += 3600 - initialData.idleData[i];
+    setData.activeData[i] += 3600 - setData.idleData[i];
   }
-  initialData.activeData[currentHour] =
+  setData.activeData[currentHour] =
     currentDate.getMinutes() * 60 +
     currentDate.getSeconds() -
-    initialData.idleData[currentHour];
+    setData.idleData[currentHour];
+  if (isFirst) {
+    initialData.first = setData;
+    initialData.isFirstActive = isActive;
+  } else {
+    initialData.second = setData;
+    initialData.isSecondActive = isActive;
+  }
   return initialData;
 };
 
@@ -198,11 +206,11 @@ export default function Dashboard() {
   const [firstInterval, setFirstInterval] = useState(null);
   const [secondInterval, setSecondInterval] = useState(null);
   const [visibleId, setVisibleId] = useState(0);
-  const [isFirstActive, setIsFirstActive] = useState(false);
-  const [isSecondActive, setIsSecondActive] = useState(false);
   const [state, dispatch] = useReducer(reducer, {
     first: null,
     second: null,
+    isFirstActive: false,
+    isSecondActive: false,
   });
   const socket = useContext(SocketContext);
 
@@ -231,72 +239,83 @@ export default function Dashboard() {
           if (ele.machineCode === 'ws01') {
             dispatch({
               type: 'initiate-first',
-              data: formatData({ ...ele, machineName: 'Mechanical' }),
+              data: formatData(
+                { ...ele, machineName: 'Mechanical' },
+                true,
+                state
+              ),
             });
-            console.log(ele.idleTime.slice(-1)[0])
-            if(ele.idleTime.slice(-1)[0].end){
-              setIsFirstActive(true);
-            }
             setSocketConnectedOne(true);
           } else {
             dispatch({
               type: 'initiate-second',
-              data: formatData({ ...ele, machineName: 'Electrical' }),
+              data: formatData(
+                { ...ele, machineName: 'Electrical' },
+                false,
+                state
+              ),
             });
-            console.log(ele.idleTime.slice(-1)[0])
-            if(ele.idleTime.slice(-1)[0].end){
-              setIsSecondActive(true);
-            }
             setSocketConnectedTwo(true);
           }
         });
       }
     };
-    if (state.first === null && state.second === null) fetch();
+    fetch();
     return () => {
       mounted = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     socket.on('cs01', (data) => {
-      if(!state.first) return;
       if (typeof data.working !== 'undefined') {
-        console.log(data.working, 'one')
-        if (data.working===1) {
-          setIsFirstActive(true);
+        if (data.working === 1) {
+          console.log('yes');
+          dispatch({
+            type: 'change-state-first',
+            data: true,
+          });
         } else {
-          setIsFirstActive(false);
+          console.log('no');
+          dispatch({
+            type: 'change-state-first',
+            data: false,
+          });
         }
       } else if (typeof data.cycle !== 'undefined') {
         if (!data.cycle) {
           dispatch({
             type: 'increment-cycle-first',
-            data: getIncrementCycle(state.first)
+            data: getIncrementCycle(state.first),
           });
         }
-      }else {
+      } else {
         clearInterval(firstInterval);
       }
     });
 
     socket.on('cs02', (data) => {
-      if(!state.second) return;
       if (typeof data.working !== 'undefined') {
-        console.log(data.working, 'two')
-        if (data.working===1) {
-          setIsSecondActive(true);
+        if (data.working === 1) {
+          dispatch({
+            type: 'change-state-second',
+            data: true,
+          });
         } else {
-          setIsSecondActive(false);
+          dispatch({
+            type: 'change-state-second',
+            data: false,
+          });
         }
       } else if (typeof data.cycle !== 'undefined') {
         if (!data.cycle) {
           dispatch({
             type: 'increment-cycle-second',
-            data: getIncrementCycle(state.second)
+            data: getIncrementCycle(state.second),
           });
         }
-      }else {
+      } else {
         clearInterval(secondInterval);
       }
     });
@@ -306,6 +325,7 @@ export default function Dashboard() {
       // unbind all event handlers used in this component
       socket.off('disconnect');
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
 
   useEffect(() => {
@@ -319,14 +339,14 @@ export default function Dashboard() {
       if (state.first !== null) {
         dispatch({
           type: 'increment-first',
-          data: getIncrement(state.first, isFirstActive)
+          data: getIncrement(state.first, state.isFirstActive),
         });
       }
     }, 1000);
     setFirstInterval(intervalOne);
     return () => clearInterval(intervalOne);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socketConnectedOne]);
+  }, [socketConnectedOne, state.isFirstActive]);
 
   useEffect(() => {
     if (!socketConnectedTwo) {
@@ -339,14 +359,14 @@ export default function Dashboard() {
       if (state.second !== null) {
         dispatch({
           type: 'increment-second',
-          data: getIncrement(state.second, isSecondActive)
+          data: getIncrement(state.second, state.isSecondActive),
         });
       }
     }, 1000);
-    setSecondInterval(intervalTwo)
+    setSecondInterval(intervalTwo);
     return () => clearInterval(intervalTwo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socketConnectedTwo]);
+  }, [socketConnectedTwo, state.isSecondActive]);
 
   if (!state.first && !state.second) {
     return null;
@@ -534,19 +554,18 @@ export default function Dashboard() {
               {getTotal(item?.totalCycles, true)}
             </div>
             <div style={{ color: '#1BBC1B', fontSize: '14px' }}>
-              {item?.cycleTime?(
+              {item?.cycleTime ? (
                 <>
-                  {msToMinutes(
-                getTotal(item?.totalCycles, true) === 0
-                  ? getTotal(item?.activeData, true)
-                  : (
-                      getTotal(item?.cycleTime, true) /
-                      getTotal(item?.totalCycles, true)
-                    )
-                    )}
-              mins
+                  {getTotal(item?.totalCycles, true) === 0
+                    ? '--'
+                    : `${msToMinutes(
+                        getTotal(item?.cycleTime, true) /
+                          getTotal(item?.totalCycles, true)
+                      )} mins`}
                 </>
-              ):('NA')}
+              ) : (
+                'NA'
+              )}
             </div>
           </div>
         ))}
@@ -570,11 +589,11 @@ export default function Dashboard() {
                 Select Workstation :{' '}
               </span>
               <CustomSelect
-                selectedName={visibleId===0?"Mechanical":"Electrical"}
+                selectedName={visibleId === 0 ? 'Mechanical' : 'Electrical'}
                 imageColor="true"
                 optionsList={countryList}
-                selectedItem={visibleId===0?"Mechanical":"Electrical"}
-                changeSelect={(e)=> setVisibleId(e)}
+                selectedItem={visibleId === 0 ? 'Mechanical' : 'Electrical'}
+                changeSelect={(e) => setVisibleId(e)}
               />
             </div>
             <div className="d-flex align-items-center">
@@ -606,7 +625,7 @@ export default function Dashboard() {
           <div style={{ color: '#52575C' }}>No of task</div>
           <div style={{ color: '#52575C' }}>Cycle time</div>
         </div>
-        <DataTable data={visibleId===0?state.first:state.second} />
+        <DataTable data={visibleId === 0 ? state.first : state.second} />
       </div>
 
       <div
@@ -627,12 +646,11 @@ export default function Dashboard() {
         </div>
         <div style={{ color: '#52575C' }}>
           {getTotal(state?.first?.totalCycles, true) === 0
-            ? '0:00'
-            : msToMinutes(
+            ? '--'
+            : `${msToMinutes(
                 getTotal(state?.first?.cycleTime, true) /
                   getTotal(state?.first?.totalCycles, true)
-              )}{' '}
-          mins
+              )} mins`}
         </div>
       </div>
     </>
