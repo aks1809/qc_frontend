@@ -58,7 +58,7 @@ const getIncrement = (state, isActive) => {
 const getIncrementCycle = (state) => {
   if (!state) return null;
   const currentHour = new Date().getHours() - timeMapper;
-  state.cycleTime[currentHour]++;
+  state.totalCycles[currentHour]++;
   return state;
 };
 
@@ -184,12 +184,14 @@ const formatData = (data, isFirst, state) => {
   const currentDate = new Date();
   const currentHour = currentDate.getHours() - timeMapper;
   for (let i = 0; i < currentHour; i++) {
-    setData.activeData[i] += 3600 - setData.idleData[i];
+    setData.activeData[i] += Math.max(3600 - setData.idleData[i], 0);
   }
-  setData.activeData[currentHour] =
+  setData.activeData[currentHour] = Math.max(
     currentDate.getMinutes() * 60 +
-    currentDate.getSeconds() -
-    setData.idleData[currentHour];
+      currentDate.getSeconds() -
+      setData.idleData[currentHour],
+    0
+  );
   if (isFirst) {
     initialData.first = setData;
     initialData.isFirstActive = isActive;
@@ -271,13 +273,11 @@ export default function Dashboard() {
     socket.on('cs01', (data) => {
       if (typeof data.working !== 'undefined') {
         if (data.working === 1) {
-          console.log('yes');
           dispatch({
             type: 'change-state-first',
             data: true,
           });
         } else {
-          console.log('no');
           dispatch({
             type: 'change-state-first',
             data: false,
