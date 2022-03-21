@@ -11,7 +11,7 @@ export default function Header() {
         margin: '0 auto',
         marginTop: '0px',
         // height: "60px",
-        paddingTop: '15px',
+        padding: '15px 0',
         display: 'flex',
         justifyContent: 'space-between',
         backgrounColor: 'rgb(232, 239, 249)',
@@ -20,12 +20,10 @@ export default function Header() {
       }}
     >
       <div style={{ float: 'left', marginLeft: '50px' }}>
-        <Frinks style={{ width: '80px', height: '62px !important' }} />
+        <Frinks style={{ width: '80px', height: '80px' }} />
       </div>
       <div style={{ marginRight: '40px' }} className="span-data">
         <span style={{ color: '#336CFB' }}>Home page</span>
-        <span>Analytics</span>
-
         <img src={profile} alt="profile" />
       </div>
     </div>

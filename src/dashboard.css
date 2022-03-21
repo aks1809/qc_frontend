@@ -34,7 +34,7 @@
   font-weight: bold;
 }
 
-.graph-div2{
+.graph-div2 {
   margin-left: 8%;
   margin-right: 8%;
   margin-top: 70px;
@@ -84,7 +84,7 @@
   width: 23.33%;
   color: #52575c;
 }
-.table-cont8{
+.table-cont8 {
   display: flex;
   margin-bottom: 50px !important;
   margin: 0px 8%;
@@ -116,4 +116,34 @@
   font-weight: bold;
   margin-left: 20px;
   font-size: 19px;
+}
+
+.image-container {
+  margin: 20px 8%;
+}
+
+.image-div {
+  border: 1px solid gray;
+  padding: 0 !important;
+}
+
+.image-div > img {
+  max-width: -webkit-fill-available;
+  width: 100%;
+}
+
+.parts {
+  color: green;
+  font-size: 25px;
+  font-weight: 900;
+}
+
+.test-result {
+  font-size: 20px;
+  color: red;
+  font-weight: 900;
+}
+
+.result {
+  text-align: center;
 }
