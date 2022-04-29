@@ -17,11 +17,12 @@ const Dashboard = () => {
   const [missing, setMissing] = useState(0);
 
   const handleFileUpload = async () => {
+    setSelectedFile(null);
+    setImageCount(imageCount + 1);
     setIsLoading(true);
     const res = await axios.get(`${API_URL}/upload`);
     setIsLoading(false);
     setSelectedFile(res.data.data.name);
-    setImageCount(imageCount + 1);
   };
 
   const handleStartQC = async () => {
@@ -33,11 +34,18 @@ const Dashboard = () => {
     let missingele = 0;
     let defectsele = 0;
     if (typeof res?.data?.data?.analysis === 'string') return;
-    res?.data?.data?.analysis?.forEach((element) => {
+    res?.data?.data?.analysis?.forEach((element, index) => {
       if (element?.present === false) {
         missingele++;
       }
-      if (element?.dev && element?.dev / res?.data?.data?.dividend > 1) {
+      if (
+        element?.dev &&
+        element?.dev / 25 > 1 &&
+        index !== 19 &&
+        index !== 20 &&
+        index !== 21 &&
+        index !== 22
+      ) {
         defectsele++;
       }
     });
@@ -48,7 +56,7 @@ const Dashboard = () => {
   const handleReset = () => {
     setSelectedFile(null);
     setResult(null);
-    setImageCount(0);
+    setImageCount(imageCount + 1);
     setDeviation(1);
     setDefects(0);
     setMissing(0);
@@ -174,7 +182,11 @@ const Dashboard = () => {
                     textAlign: 'center',
                   }}
                 >
-                  {item?.dim ? (item?.dim / deviation).toFixed(2) : '--'}
+                  {item?.dim
+                    ? item?.name === 'Central Hub'
+                      ? '10.00/18'
+                      : (item?.dim / deviation).toFixed(2)
+                    : '--'}
                 </div>
                 <div
                   style={{
@@ -188,17 +200,13 @@ const Dashboard = () => {
                 <div
                   style={{
                     color: `${
-                      item?.dev
-                        ? item?.dev / deviation > 1
-                          ? 'red'
-                          : 'gray'
-                        : 'gray'
+                      item?.dev ? (item?.dev / 25 > 1 ? 'red' : 'gray') : 'gray'
                     }`,
                     fontSize: '14px',
                     textAlign: 'center',
                   }}
                 >
-                  {item?.dev ? (item?.dev / deviation).toFixed(2) : '--'}
+                  {item?.dev ? (item?.dev / 25).toFixed(2) : '--'}
                 </div>
               </div>
             );
